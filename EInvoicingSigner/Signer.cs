@@ -16,49 +16,25 @@ public class TokenSigner
     {
         TokenSigner tokenSigner = new TokenSigner();       
 
-        if (args == null || args.Length < 1)
+        if (args == null || args.Length < 1 || File.Exists(args[0]) == false)
         {
-            Console.WriteLine("Can't Sign the document without arguments, Sorry....");
+            Console.WriteLine("document doesnot exist");
             return;
         }
-        
-        if (File.Exists(args[0]) == false)
-        {
-            Console.WriteLine("The file " + args[0] + @" does not exist");
-            return;
-        }
-        String cades = "";
-        String SourceDocumentJson = File.ReadAllText(args[0]);
-        String currentDirectoy = Directory.GetCurrentDirectory();
 
-        JObject request = JsonConvert.DeserializeObject<JObject>(SourceDocumentJson, new JsonSerializerSettings()
-        {
-            FloatFormatHandling = FloatFormatHandling.String,
-            FloatParseHandling = FloatParseHandling.Decimal,
-            DateFormatHandling = DateFormatHandling.IsoDateFormat,
-            DateParseHandling = DateParseHandling.None
-        });
+        JObject unsignedInvoice = tokenSigner.ReadJsonFromFile(args[0]);
+
 
         tokenSigner.FindCertificateFromSelector();
-
         //Start serialize
-        String canonicalString = tokenSigner.Serialize(request);
-        File.WriteAllBytes(currentDirectoy + @"\CanonicalString.txt", System.Text.Encoding.UTF8.GetBytes(canonicalString));
+        String canonicalString = tokenSigner.Serialize(unsignedInvoice);
 
+        String cades = tokenSigner.SignWithCMS(canonicalString);
 
-        cades = tokenSigner.SignWithCMS(canonicalString);        
+        String fullSignedInvoice = tokenSigner.AddSignatureToInvoice(unsignedInvoice, cades);
 
-        File.WriteAllBytes(currentDirectoy + @"\Cades.txt", System.Text.Encoding.UTF8.GetBytes(cades));
-
-        JObject signaturesObject = new JObject(
-                                new JProperty("signatureType", "I"),
-                                new JProperty("value", cades));
-
-        JArray signaturesArray = new JArray();
-        signaturesArray.Add(signaturesObject);
-        request.Add("signatures", signaturesArray);
-        String fullSignedDocument = "{\"documents\":[" + request.ToString() + "]}";
-        File.WriteAllBytes(currentDirectoy + @"\FullSignedDocument.json", System.Text.Encoding.UTF8.GetBytes(fullSignedDocument));
+        
+        File.WriteAllBytes(Directory.GetCurrentDirectory() + @"\FullSignedDocument.json", System.Text.Encoding.UTF8.GetBytes(fullSignedInvoice));
     }
 
         private byte[] HashBytes(byte[] input)
@@ -84,6 +60,37 @@ public class TokenSigner
 
             this.selectedCertificate = (X509Certificate2)certificates[0];
             store.Close();
+        }
+
+        private JObject ReadJsonFromFile(String FileName)
+        {
+            // exception 1
+
+        String sourceDocumentJson = File.ReadAllText(FileName);
+
+            JObject documentJson = JsonConvert.DeserializeObject<JObject>(sourceDocumentJson, new JsonSerializerSettings()
+            {
+                FloatFormatHandling = FloatFormatHandling.String,
+                FloatParseHandling = FloatParseHandling.Decimal,
+                DateFormatHandling = DateFormatHandling.IsoDateFormat,
+                DateParseHandling = DateParseHandling.None
+            });
+
+        return documentJson;
+            
+        }
+
+        private String AddSignatureToInvoice(JObject unsignedInvoice, String cades)
+        {
+            JObject signaturesObject = new JObject(
+                                new JProperty("signatureType", "I"),
+                                new JProperty("value", cades));
+
+            JArray signaturesArray = new JArray();
+            signaturesArray.Add(signaturesObject);
+            unsignedInvoice.Add("signatures", signaturesArray);
+            String fullSignedInvoice = "{\"documents\":[" + unsignedInvoice.ToString() + "]}";
+        return fullSignedInvoice;
         }
 
         public string SignWithCMS(String serializedJson)
