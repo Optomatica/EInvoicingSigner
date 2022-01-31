@@ -74,14 +74,26 @@ public class TokenSigner
             }
         }
 
-        private byte[] HashBytes(byte[] input)
+        private void ReadJsonFromFile(String FileName)
         {
-            using (SHA256 sha = SHA256.Create())
+            String sourceDocumentJson = File.ReadAllText(FileName);
+
+            try
             {
-                var output = sha.ComputeHash(input);
-                return output;
+                this.unsignedInvoice = JsonConvert.DeserializeObject<JObject>(sourceDocumentJson, new JsonSerializerSettings()
+                {
+                    FloatFormatHandling = FloatFormatHandling.String,
+                    FloatParseHandling = FloatParseHandling.Decimal,
+                    DateFormatHandling = DateFormatHandling.IsoDateFormat,
+                    DateParseHandling = DateParseHandling.None
+                });
             }
-        }
+            catch (Exception)
+            {
+                Console.WriteLine("Invoice Parsing Error");
+                return;
+            }
+        }        
 
         private void FindCertificateFromSelector()
         {
@@ -115,77 +127,6 @@ public class TokenSigner
                 return;
             }
             store.Close();
-        }
-
-        private void ReadJsonFromFile(String FileName)
-        {
-            String sourceDocumentJson = File.ReadAllText(FileName);
-
-            try
-            {
-                this.unsignedInvoice = JsonConvert.DeserializeObject<JObject>(sourceDocumentJson, new JsonSerializerSettings()
-                {
-                    FloatFormatHandling = FloatFormatHandling.String,
-                    FloatParseHandling = FloatParseHandling.Decimal,
-                    DateFormatHandling = DateFormatHandling.IsoDateFormat,
-                    DateParseHandling = DateParseHandling.None
-                });
-            }
-            catch (Exception)
-            {
-                Console.WriteLine("Invoice Parsing Error");
-                return;
-            }
-        }
-
-        private void WriteSignedInvoiceToFile() 
-        {
-            String signedInvoiceName = $"SignedInvoice_{this.identifierTimestamp}.json";
-            File.WriteAllBytes(Directory.GetCurrentDirectory() +'\\'+ signedInvoiceName, System.Text.Encoding.UTF8.GetBytes(this.fullSignedInvoice));
-            Console.WriteLine(signedInvoiceName);
-        }
-
-        private void AddSignatureToInvoice()
-        {
-            JObject signaturesObject = new JObject(
-                                new JProperty("signatureType", this.signatureType),
-                                new JProperty("value", this.cades));
-
-            JArray signaturesArray = new JArray();
-            signaturesArray.Add(signaturesObject);
-            unsignedInvoice.Add("signatures", signaturesArray);
-            this.fullSignedInvoice = "{\"documents\":[" + this.unsignedInvoice.ToString() + "]}";            
-        }
-
-        public void SignWithCMS()
-        {
-            byte[] data = Encoding.UTF8.GetBytes(this.canonicalString);
-
-            ContentInfo content = new ContentInfo(new Oid("1.2.840.113549.1.7.5"), data);
-            SignedCms cms = new SignedCms(content, true);
-
-            EssCertIDv2 bouncyCertificate = new EssCertIDv2(new Org.BouncyCastle.Asn1.X509.AlgorithmIdentifier(new DerObjectIdentifier("1.2.840.113549.1.9.16.2.47")), this.HashBytes(this.selectedCertificate.RawData));
-            SigningCertificateV2 signerCertificateV2 = new SigningCertificateV2(new EssCertIDv2[] { bouncyCertificate });
-            
-            CmsSigner signer = new CmsSigner(this.selectedCertificate)
-            {
-                DigestAlgorithm = new Oid("2.16.840.1.101.3.4.2.1")
-            };
-
-            signer.SignedAttributes.Add(new Pkcs9SigningTime(DateTime.UtcNow));
-            signer.SignedAttributes.Add(new AsnEncodedData(new Oid("1.2.840.113549.1.9.16.2.47"), signerCertificateV2.GetEncoded()));
-
-
-            try
-            {
-                cms.ComputeSignature(signer, false);
-            }
-            catch (Exception)
-            {
-                Console.WriteLine("Incorrect PIN or The Certificate has no PIN");
-                return;
-            }
-            this.cades = Convert.ToBase64String(cms.Encode());
         }
 
         public void Serialize()
@@ -244,6 +185,65 @@ public class TokenSigner
             }
 
             return serialized;
+        }
+        
+        private byte[] HashBytes(byte[] input)
+        {
+            using (SHA256 sha = SHA256.Create())
+            {
+                var output = sha.ComputeHash(input);
+                return output;
+            }
+        }
+
+        public void SignWithCMS()
+        {
+            byte[] data = Encoding.UTF8.GetBytes(this.canonicalString);
+
+            ContentInfo content = new ContentInfo(new Oid("1.2.840.113549.1.7.5"), data);
+            SignedCms cms = new SignedCms(content, true);
+
+            EssCertIDv2 bouncyCertificate = new EssCertIDv2(new Org.BouncyCastle.Asn1.X509.AlgorithmIdentifier(new DerObjectIdentifier("1.2.840.113549.1.9.16.2.47")), this.HashBytes(this.selectedCertificate.RawData));
+            SigningCertificateV2 signerCertificateV2 = new SigningCertificateV2(new EssCertIDv2[] { bouncyCertificate });
+            
+            CmsSigner signer = new CmsSigner(this.selectedCertificate)
+            {
+                DigestAlgorithm = new Oid("2.16.840.1.101.3.4.2.1")
+            };
+
+            signer.SignedAttributes.Add(new Pkcs9SigningTime(DateTime.UtcNow));
+            signer.SignedAttributes.Add(new AsnEncodedData(new Oid("1.2.840.113549.1.9.16.2.47"), signerCertificateV2.GetEncoded()));
+
+
+            try
+            {
+                cms.ComputeSignature(signer, false);
+            }
+            catch (Exception)
+            {
+                Console.WriteLine("Incorrect PIN or The Certificate has no PIN");
+                return;
+            }
+            this.cades = Convert.ToBase64String(cms.Encode());
+        }
+
+        private void AddSignatureToInvoice()
+        {
+            JObject signaturesObject = new JObject(
+                                new JProperty("signatureType", this.signatureType),
+                                new JProperty("value", this.cades));
+
+            JArray signaturesArray = new JArray();
+            signaturesArray.Add(signaturesObject);
+            unsignedInvoice.Add("signatures", signaturesArray);
+            this.fullSignedInvoice = "{\"documents\":[" + this.unsignedInvoice.ToString() + "]}";            
+        }
+
+        private void WriteSignedInvoiceToFile() 
+        {
+            String signedInvoiceName = $"SignedInvoice_{this.identifierTimestamp}.json";
+            File.WriteAllBytes(Directory.GetCurrentDirectory() +'\\'+ signedInvoiceName, System.Text.Encoding.UTF8.GetBytes(this.fullSignedInvoice));
+            Console.WriteLine(signedInvoiceName);
         }
 }
 
