@@ -15,28 +15,63 @@ public class TokenSigner
         private String canonicalString;
         private String cades;
         private String fullSignedInvoice;
+        private List<String> knownIssuers = new List<String> { "MCDR", "Investors CA" };
+        private String signatureType = "I";
+        private String identifierTimestamp = DateTimeOffset.Now.ToUnixTimeSeconds().ToString();
 
-        public static void Main(String[] args)
+    public static void Main(String[] args)
         {
             TokenSigner tokenSigner = new TokenSigner();
 
-            if (args == null || args.Length < 1 || File.Exists(args[0]) == false)
+            if (args.Length < 1 || File.Exists(args[0]) == false)
             {
-                Console.WriteLine("document doesnot exist");
+                Console.WriteLine("null_or_wrong_argument");
                 return;
-                //throw new ArgumentException("Errorneous Argument");
             }
-
+       
             tokenSigner.ReadJsonFromFile(args[0]);
 
             tokenSigner.FindCertificateFromSelector();
-        
-            tokenSigner.Serialize();
 
-            tokenSigner.SignWithCMS();
+            try
+            {
+                tokenSigner.Serialize();
+            }
+            catch (Exception)
+            {
+                Console.WriteLine("Error Upon Serializing the invoice.");
+                return;
+            }
 
-            tokenSigner.AddSignatureToInvoice();
-            tokenSigner.WriteSignedInvoiceToFile();
+            try
+            {
+                tokenSigner.SignWithCMS();
+            }
+            catch (Exception)
+            {
+                Console.WriteLine("Invalid Certificate!");
+                return;
+            }
+
+            try
+            {
+                tokenSigner.AddSignatureToInvoice();
+            }
+            catch (Exception)
+            {
+                Console.WriteLine("Error on Embedding The Signature To the Invoice.");
+;                return;
+            }
+
+            try
+            {
+                tokenSigner.WriteSignedInvoiceToFile();
+            }
+            catch (Exception)
+            {
+                Console.WriteLine("Couldn't Write the Signed Invoice to a new file");
+                return;
+            }
         }
 
         private byte[] HashBytes(byte[] input)
@@ -50,57 +85,70 @@ public class TokenSigner
 
         private void FindCertificateFromSelector()
         {
-            X509Store store = new X509Store(StoreName.My, StoreLocation.CurrentUser);
-            List<String> knownIssures = new List<String> { "MCDR", "Investors CA" };
+            X509Store store;
+            try
+            {
+                store = new X509Store(StoreName.My, StoreLocation.CurrentUser);
+                store.Open(OpenFlags.ReadOnly & OpenFlags.OpenExistingOnly);
+            }
+            catch (Exception)
+            {
 
-            store.Open(OpenFlags.ReadOnly & OpenFlags.OpenExistingOnly);
-            X509Certificate2[]? validCertificates = store.Certificates.Where(x => knownIssures.Any(s => Regex.IsMatch(x.Issuer.ToString(), s))).
+                Console.WriteLine("There is a problem opening the Certificates Store.");
+                return;
+            }
+            
+            X509Certificate2[]? validCertificates = store.Certificates.Where(x => this.knownIssuers.Any(s => Regex.IsMatch(x.Issuer.ToString(), s))).
                 Where(x => x.HasPrivateKey).ToArray();
                 //Where(x => x.NotAfter > DateTime.Today && DateTime.Today > x.NotBefore).
                 
 
             X509CertificateCollection certificates = X509Certificate2UI.SelectFromCollection(new X509Certificate2Collection(validCertificates),"Certificates","please select a certificate",X509SelectionFlag.SingleSelection);
 
-            this.selectedCertificate = (X509Certificate2)certificates[0];
+            try
+            {
+                this.selectedCertificate = (X509Certificate2)certificates[0];
+            }
+            catch (Exception)
+            {
+                Console.WriteLine("No Certificate Selected.");
+                return;
+            }
             store.Close();
         }
 
         private void ReadJsonFromFile(String FileName)
         {
-            // exception 1
-
-        /*catch (Exception ex)
-        {
-            if (ex is FormatException || ex is OverflowException)
-            {
-                WebId = Guid.Empty;
-                return;
-            }
-
-            throw;
-
-        }*/
             String sourceDocumentJson = File.ReadAllText(FileName);
 
-            this.unsignedInvoice = JsonConvert.DeserializeObject<JObject>(sourceDocumentJson, new JsonSerializerSettings()
+            try
+            {
+                this.unsignedInvoice = JsonConvert.DeserializeObject<JObject>(sourceDocumentJson, new JsonSerializerSettings()
                 {
                     FloatFormatHandling = FloatFormatHandling.String,
                     FloatParseHandling = FloatParseHandling.Decimal,
                     DateFormatHandling = DateFormatHandling.IsoDateFormat,
                     DateParseHandling = DateParseHandling.None
                 });
+            }
+            catch (Exception)
+            {
+                Console.WriteLine("Invoice Parsing Error");
+                return;
+            }
         }
 
         private void WriteSignedInvoiceToFile() 
         {
-            String signedInvoiceName = "SignedInvoice.json";
+            String signedInvoiceName = $"SignedInvoice_{this.identifierTimestamp}.json";
             File.WriteAllBytes(Directory.GetCurrentDirectory() +'\\'+ signedInvoiceName, System.Text.Encoding.UTF8.GetBytes(this.fullSignedInvoice));
+            Console.WriteLine(signedInvoiceName);
         }
 
         private void AddSignatureToInvoice()
         {
             JObject signaturesObject = new JObject(
-                                new JProperty("signatureType", "I"),
+                                new JProperty("signatureType", this.signatureType),
                                 new JProperty("value", this.cades));
 
             JArray signaturesArray = new JArray();
@@ -127,8 +175,16 @@ public class TokenSigner
             signer.SignedAttributes.Add(new Pkcs9SigningTime(DateTime.UtcNow));
             signer.SignedAttributes.Add(new AsnEncodedData(new Oid("1.2.840.113549.1.9.16.2.47"), signerCertificateV2.GetEncoded()));
 
-            // exception needs to be handled
-            cms.ComputeSignature(signer, false);
+
+            try
+            {
+                cms.ComputeSignature(signer, false);
+            }
+            catch (Exception)
+            {
+                Console.WriteLine("Incorrect PIN or The Certificate has no PIN");
+                return;
+            }
             this.cades = Convert.ToBase64String(cms.Encode());
         }
 
@@ -146,9 +202,6 @@ public class TokenSigner
             }
             else
             {
-
-
-
                 if (request.Type == JTokenType.Property)
                 {
                     string name = ((JProperty)request).Name.ToUpper();
