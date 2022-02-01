@@ -25,8 +25,8 @@ public class TokenSigner
 
             if (args.Length < 1 || File.Exists(args[0]) == false)
             {
-                Console.WriteLine("null_or_wrong_argument");
-                return;
+                Console.Write("null_or_wrong_argument");
+                Environment.Exit(0);
             }
        
             tokenSigner.ReadJsonFromFile(args[0]);
@@ -39,8 +39,8 @@ public class TokenSigner
             }
             catch (Exception)
             {
-                Console.WriteLine("Error Upon Serializing the invoice.");
-                return;
+                Console.Write("Error Upon Serializing the invoice.");
+                Environment.Exit(0);
             }
 
             try
@@ -49,8 +49,8 @@ public class TokenSigner
             }
             catch (Exception)
             {
-                Console.WriteLine("Invalid Certificate!");
-                return;
+                Console.Write("Invalid Certificate!");
+                Environment.Exit(0);
             }
 
             try
@@ -59,18 +59,18 @@ public class TokenSigner
             }
             catch (Exception)
             {
-                Console.WriteLine("Error on Embedding The Signature To the Invoice.");
-;                return;
+                Console.Write("Error on Embedding The Signature To the Invoice.");
+;                Environment.Exit(0);
             }
 
             try
             {
-                tokenSigner.WriteSignedInvoiceToFile();
+                tokenSigner.WriteSignedInvoiceToFile(args[0]);
             }
             catch (Exception)
             {
-                Console.WriteLine("Couldn't Write the Signed Invoice to a new file");
-                return;
+                Console.Write("Couldn't Write the Signed Invoice to a new file");
+                Environment.Exit(0);
             }
         }
 
@@ -90,8 +90,8 @@ public class TokenSigner
             }
             catch (Exception)
             {
-                Console.WriteLine("Invoice Parsing Error");
-                return;
+                Console.Write("Invoice Parsing Error");
+                Environment.Exit(0);
             }
         }        
 
@@ -106,7 +106,8 @@ public class TokenSigner
             catch (Exception)
             {
 
-                Console.WriteLine("There is a problem opening the Certificates Store.");
+                Console.Write("There is a problem opening the Certificates Store.");
+                Environment.Exit(0);
                 return;
             }
             
@@ -123,8 +124,8 @@ public class TokenSigner
             }
             catch (Exception)
             {
-                Console.WriteLine("No Certificate Selected.");
-                return;
+                Console.Write("No Certificate Selected.");
+                Environment.Exit(0);
             }
             store.Close();
         }
@@ -221,8 +222,8 @@ public class TokenSigner
             }
             catch (Exception)
             {
-                Console.WriteLine("Incorrect PIN or The Certificate has no PIN");
-                return;
+                Console.Write("Incorrect PIN or The Certificate has no PIN");
+                Environment.Exit(0);
             }
             this.cades = Convert.ToBase64String(cms.Encode());
         }
@@ -239,11 +240,19 @@ public class TokenSigner
             this.fullSignedInvoice = "{\"documents\":[" + this.unsignedInvoice.ToString() + "]}";            
         }
 
-        private void WriteSignedInvoiceToFile() 
+        private void WriteSignedInvoiceToFile(String filePath) 
         {
+            String path = Path.GetDirectoryName(filePath);
+            
+
+            if (String.IsNullOrEmpty(path)) 
+            {
+                path = Directory.GetCurrentDirectory();
+            }
+
             String signedInvoiceName = $"SignedInvoice_{this.identifierTimestamp}.json";
-            File.WriteAllBytes(Directory.GetCurrentDirectory() +'\\'+ signedInvoiceName, System.Text.Encoding.UTF8.GetBytes(this.fullSignedInvoice));
-            Console.WriteLine(signedInvoiceName);
+            File.WriteAllBytes(path + '\\'+ signedInvoiceName, System.Text.Encoding.UTF8.GetBytes(this.fullSignedInvoice));
+            Console.Write(signedInvoiceName);
         }
 }
 
