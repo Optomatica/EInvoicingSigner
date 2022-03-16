@@ -15,7 +15,7 @@ public class TokenSigner
         private String canonicalString;
         private String cades;
         private String fullSignedInvoice;
-        private List<String> knownIssuers = new List<String> { "MCDR", "Investors CA" };
+        private List<String> knownIssuers = new List<String> { "MCDR", "Investors CA", "Egypt Trust" };
         private String signatureType = "I";
         private String identifierTimestamp = DateTimeOffset.Now.ToUnixTimeSeconds().ToString();
 
@@ -172,8 +172,12 @@ public class TokenSigner
                         }
                     }
                 }
-            }
-            if (request.Type == JTokenType.Object)
+                if (request.Type == JTokenType.String)
+                {
+                    serialized += JsonConvert.ToString(request.Value<string>());
+                }
+        }                
+        if (request.Type == JTokenType.Object)
             {
                 foreach (var property in request.Children())
                 {
