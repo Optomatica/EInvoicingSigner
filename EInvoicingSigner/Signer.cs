@@ -53,12 +53,12 @@ public class TokenSigner
             }
             catch (Exception e)
             {
-                invoice.setStatus(e.Message);
-                continue;
+                Console.Write(e.Message);
+                Environment.Exit(0);
             }
 
-            invoice.writeInvoiceAfterSigning(cades);
-            consoleOutput.Add(invoice.getStatus());
+            invoice.writeInvoiceAfterSigning(cades);            
+            consoleOutput.Add(invoice.getStatus());           
         }
 
         Console.Write(String.Join(',', consoleOutput));
@@ -151,22 +151,23 @@ public class Invoice
     private String canonicalString = String.Empty;
     private String cades = String.Empty;
     private String fullSignedInvoice = String.Empty;
-    private String identifierTimestamp = DateTimeOffset.Now.ToUnixTimeMilliseconds().ToString();
     private String invoiceStatus = String.Empty;
     private String signatureType = "I";
+    private string internalID = String.Empty;
 
     public Invoice(JObject unsingnedInvoice, String filePath)
     {
         this.unsignedInvoice = unsingnedInvoice;
-        this.filePath = filePath;
+        this.filePath = filePath;        
 
         try
         {
+            this.internalID = unsignedInvoice.GetValue("internalID").ToString();
             this.canonicalString = SerializeToken(this.unsignedInvoice);
         }
         catch (Exception)
         {
-            Console.Write("Error Upon Serializing the invoice.");
+            Console.Write("Internal ID not Found or Error Upon Serializing the invoice.");
             Environment.Exit(0);
         }
     }
@@ -174,10 +175,6 @@ public class Invoice
     public String getCanonicalString()
     {
         return this.canonicalString;
-    }
-    public void setStatus(String status)
-    {
-        this.invoiceStatus = status;
     }
 
     public String getStatus()
@@ -194,7 +191,8 @@ public class Invoice
         }
         catch (Exception)
         {
-            this.invoiceStatus = "Error on Embedding The Signature To the Invoice.";
+            Console.Write("Error on Embedding The Signature To the Invoice.");
+            Environment.Exit(0);
         }
 
         try
@@ -203,7 +201,8 @@ public class Invoice
         }
         catch (Exception)
         {
-            this.invoiceStatus = "Couldn't Write the Signed Invoice to a new file";
+            Console.Write("Couldn't Write the Signed Invoice to a new file");
+            Environment.Exit(0);
         }
     }
 
@@ -285,8 +284,8 @@ public class Invoice
             path = Directory.GetCurrentDirectory();
         }
 
-        String signedInvoiceName = $"SignedInvoice_{this.identifierTimestamp}.json";
+        String signedInvoiceName = $"SignedInvoice_{this.internalID}.json";
         File.WriteAllBytes(path + '\\' + signedInvoiceName, System.Text.Encoding.UTF8.GetBytes(this.fullSignedInvoice));
-        this.invoiceStatus = signedInvoiceName;
+        this.invoiceStatus = signedInvoiceName;    
     }
 }
