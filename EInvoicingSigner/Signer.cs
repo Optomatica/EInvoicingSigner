@@ -51,9 +51,9 @@ public class TokenSigner
             {
                 cades = tokenSigner.SignWithCMS(canonicalString);                
             }
-            catch (Exception)
+            catch (Exception e)
             {
-                invoice.setStatus("Invalid Certificate!");
+                invoice.setStatus(e.Message);
                 continue;
             }
 
@@ -131,16 +131,7 @@ public class TokenSigner
         signer.SignedAttributes.Add(new Pkcs9SigningTime(DateTime.UtcNow));
         signer.SignedAttributes.Add(new AsnEncodedData(new Oid("1.2.840.113549.1.9.16.2.47"), signerCertificateV2.GetEncoded()));
 
-
-        try
-        {
-            cms.ComputeSignature(signer, false);
-        }
-        catch (Exception)
-        {
-            Console.Write("Incorrect PIN or The Certificate has no PIN");
-            Environment.Exit(0);
-        }
+        cms.ComputeSignature(signer, false);
         return Convert.ToBase64String(cms.Encode());
     }
     private byte[] HashBytes(byte[] input)
